@@ -8,9 +8,8 @@ const NUM_MERGES: u32 = VOCAB_SIZE - 256;
 
 // training
 
-fn train(ids: &[u32], num_merges: u32) -> (HashMap<(u32, u32), u32>, HashMap<u32, Vec<u8>>) {
+fn train(ids: &[u32], num_merges: u32) -> HashMap<(u32, u32), u32> {
     println!("training: ids={}, num_merges={}", ids.len(), num_merges);
-    let mut pairs = Vec::new(); // original merge order
     let mut merges = HashMap::new();
     let mut ids = Vec::from(ids);
     for i in 0..num_merges {
@@ -19,24 +18,28 @@ fn train(ids: &[u32], num_merges: u32) -> (HashMap<(u32, u32), u32>, HashMap<u32
             // println!("merge:{}, pair:{:?}, count:{}", i, pair, _count);
             let idx = 256 + i;
             ids = merge(&ids, pair, idx);
-            pairs.push(pair);
             merges.insert(pair, idx);
         } else {
             break;
         }
     }
+    merges
+}
+
+fn build_vocab(merges: &HashMap<(u32, u32), u32>) -> HashMap<u32, Vec<u8>> {
     let mut vocab = HashMap::new();
     for idx in 0..256_u32 {
         vocab.insert(idx, vec![idx as u8]);
     }
-    for &(p0, p1) in &pairs {
-        let &idx = merges.get(&(p0, p1)).unwrap();
+    let mut merges: Vec<_> = merges.iter().map(|(&p, &idx)| (idx, p.0, p.1)).collect();
+    merges.sort_by_key(|&(idx, _, _)| idx);
+    for &(idx, p0, p1) in &merges {
         let mut merged = vec![];
         merged.extend(vocab.get(&p0).unwrap());
         merged.extend(vocab.get(&p1).unwrap());
         vocab.insert(idx, merged);
     }
-    (merges, vocab)
+    vocab
 }
 
 fn get_stats(ids: &[u32]) -> HashMap<(u32, u32), u32> {
@@ -71,9 +74,8 @@ fn encode(merges: &HashMap<(u32, u32), u32>, text: &str) -> Vec<u32> {
         if let Some((&pair, _)) = stats
             .iter()
             .filter(|&(k, _)| merges.contains_key(k))
-            .min_by_key(|&(k, _)| merges.get(k).unwrap_or(&u32::MAX)) {
-            let idx = merges[&pair];
-            ids = merge(&ids, pair, idx);
+            .min_by_key(|&(k, _)| merges.get(k)) {
+            ids = merge(&ids, pair, merges[&pair]);
         } else {
             break;
         }
@@ -113,8 +115,8 @@ mod tests {
         let text = "The girl, unlike most people photographed for fashion magazines, was not beautiful.";
         let tokens: Vec<u32> = text.as_bytes().iter().map(|&b| b.into()).collect();
         let ids = tokens.clone();
-        let (merges, vocab) = train(&ids, 512);
-
+        let merges = train(&ids, 512);
+        let vocab = build_vocab(&merges);
         assert_eq!(decode(&vocab, &encode(&merges, text)), text);
     }
 }
@@ -128,7 +130,8 @@ fn main() -> io::Result<()> {
     // train
     let tokens: Vec<u32> = buffer.iter().map(|&b| b.into()).collect();
     let ids = tokens.clone();
-    let (merges, vocab) = train(&ids, NUM_MERGES);
+    let merges = train(&ids, NUM_MERGES);
+    let vocab = build_vocab(&merges);
     println!("merges:{}, vocab:{}", merges.len(), vocab.len());
 
     // encode & decode
