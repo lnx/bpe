@@ -35,8 +35,8 @@ fn build_vocab(merges: &HashMap<(u32, u32), u32>) -> HashMap<u32, Vec<u8>> {
     merges.sort_by_key(|&(idx, _, _)| idx);
     for &(idx, p0, p1) in &merges {
         let mut merged = vec![];
-        merged.extend(vocab.get(&p0).unwrap());
-        merged.extend(vocab.get(&p1).unwrap());
+        merged.extend(&vocab[&p0]);
+        merged.extend(&vocab[&p1]);
         vocab.insert(idx, merged);
     }
     vocab
