@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read};
@@ -70,11 +71,11 @@ fn merge(ids: &[u32], pair: (u32, u32), idx: u32) -> Vec<u32> {
 fn encode(merges: &HashMap<(u32, u32), u32>, text: &str) -> Vec<u32> {
     let mut ids: Vec<u32> = text.as_bytes().iter().map(|&b| b.into()).collect();
     while ids.len() >= 2 {
-        let stats = get_stats(&ids);
-        if let Some((&pair, _)) = stats
+        let pairs: HashSet<(u32, u32)> = ids.windows(2).map(|p| (p[0], p[1])).collect();
+        if let Some(&pair) = pairs
             .iter()
-            .filter(|&(k, _)| merges.contains_key(k))
-            .min_by_key(|&(k, _)| merges.get(k)) {
+            .filter(|&k| merges.contains_key(k))
+            .min_by_key(|&k| merges.get(k)) {
             ids = merge(&ids, pair, merges[&pair]);
         } else {
             break;
